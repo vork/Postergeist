@@ -155,11 +155,13 @@ Diagrams automatically adapt to the active template's color scheme.
 
 ### Images
 
-Standard markdown images, automatically scaled to fit:
+Standard markdown images with automatic captions from alt text:
 
 ```markdown
-![Description](images/figure.png)
+![**Method overview:** our pipeline](images/figure.png)
 ```
+
+Alt text is rendered as a caption below the image. Markdown formatting (bold, italic, code) is supported in captions — bold text is highlighted in the primary color.
 
 ### Image Grids
 
@@ -225,12 +227,13 @@ size: 100x70cm    # centimeters
 
 ### Built-in Templates
 
-| Name | Description |
-|------|-------------|
-| `classic` | Traditional academic poster with connected cells and bold header |
-| `modern-dark` | Sleek dark theme with neon cyan accents and glassmorphism |
-| `minimal` | Clean white design with subtle borders and elegant typography |
-| `gradient` | Vibrant gradient header with rounded cards and soft shadows |
+| Name | Description | Fonts |
+|------|-------------|-------|
+| `classic` | Traditional academic poster with bold header | DM Sans / Source Serif 4 |
+| `modern-dark` | Sleek dark theme with neon accents and glassmorphism | Oswald / Montserrat |
+| `modern-light` | Light counterpart to Modern Dark with the same fonts and layout | Oswald / Montserrat |
+| `minimal` | Clean white design with subtle borders and elegant typography | Averia Serif Libre / Geist |
+| `gradient` | Vibrant gradient header with rounded cards and soft shadows | Poppins / Lora |
 
 List templates: `postergeist templates`
 
@@ -311,6 +314,8 @@ Any omitted keys fall back to the `classic` template defaults. Fonts are loaded 
 | `column_gap` | `5mm` | Gap between columns |
 | `poster_margin` | `10mm` | Outer margin around the poster body (all sides) |
 | `header_padding` | `6mm 10mm` | Padding inside the header (CSS shorthand) |
+| `image_border` | `none` | Border around images (useful for dark themes, e.g. `0.3mm solid rgba(255,255,255,0.12)`) |
+| `image_radius` | `1mm` | Image corner radius |
 
 ## Editor
 
@@ -319,6 +324,7 @@ The development server (`postergeist serve`) provides a live editor with:
 - **Drag-and-drop** — Reorder cells by dragging their headers
 - **Cell resize** — Drag the bottom edge of cells to adjust height
 - **Column resize** — Drag between columns to adjust widths
+- **Split cell resize** — Drag the divider between split cell halves to adjust proportions
 - **Split/merge** — Split cells into side-by-side halves or merge them back
 - **Live reload** — Edits to the markdown file are instantly reflected
 - **Preview/Edit toggle** — Switch between editing and clean preview modes
@@ -349,6 +355,39 @@ postergeist export <file.md> [-o output.html]
 postergeist templates
     List available built-in templates
 ```
+
+## Paper-to-Poster Skill (Claude Code)
+
+Postergeist includes a Claude Code skill that automatically converts academic paper PDFs into posters.
+
+### Setup
+
+The skill is located at `.claude/skills/paper-to-poster/SKILL.md`. It's automatically available when using Claude Code in this project.
+
+### Usage
+
+```
+/paper-to-poster path/to/paper.pdf
+/paper-to-poster https://arxiv.org/abs/2408.00653
+/paper-to-poster paper.pdf CVPR 2026
+```
+
+The skill accepts:
+- **Local PDF paths** — extracts content and figures directly
+- **URLs** — downloads the PDF first (supports ArXiv abs/pdf links, direct PDF URLs)
+- **Optional conference name** — used as subtitle and to inform style choices
+
+### What it does
+
+1. **Extracts** text and figures from the PDF using PyMuPDF (handles raster images, vector drawings, and complex LaTeX figures)
+2. **Generates** a 3-column poster markdown:
+   - Column 1 (narrow): Motivation, problem statement, approach overview
+   - Column 2 (wide): Key results, main figures, visual comparisons
+   - Column 3 (narrow): Supporting tables, ablations, references
+3. **Reviews** the poster against the original paper for accuracy and completeness
+4. **Optimizes** whitespace by adjusting cell heights
+
+The generated poster uses all available Postergeist features: split cells, image grids, mermaid diagrams, math equations, blockquotes, and tables.
 
 ## Project Structure
 
