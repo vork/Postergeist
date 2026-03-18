@@ -94,7 +94,9 @@ def extract(pdf_path: str, img_dir: str) -> None:
                 continue
             txt = b[4].strip()
             rect = fitz.Rect(b[:4])
-            if len(txt) > 100:
+            lower = txt.lower()
+            is_caption = lower.startswith("fig") or lower.startswith("table")
+            if len(txt) > 100 and not is_caption:
                 large_text_rects.append(rect)
             elif len(txt) < 30:
                 small_text_rects.append((rect, txt))
@@ -165,12 +167,59 @@ def extract(pdf_path: str, img_dir: str) -> None:
 
         fig_regions = merge_rects(visual_rects)
 
-        # --- Filter out tiny regions ---
+        # --- Second merge pass for nearby figure regions ---
+        # Merge figure regions that are close to each other (within
+        # a generous gap) and whose union doesn't overlap body text.
+        # This catches multi-row pipeline diagrams and horizontally
+        # spread figures that the first conservative pass missed.
+        def merge_nearby_figures(
+            regions: list[fitz.Rect], gap: int = 40
+        ) -> list[fitz.Rect]:
+            if len(regions) <= 1:
+                return regions
+            changed = True
+            while changed:
+                changed = False
+                regions = sorted(regions, key=lambda r: (r.y0, r.x0))
+                new: list[fitz.Rect] = []
+                skip: set[int] = set()
+                for i in range(len(regions)):
+                    if i in skip:
+                        continue
+                    cur = fitz.Rect(regions[i])
+                    for j in range(i + 1, len(regions)):
+                        if j in skip:
+                            continue
+                        other = regions[j]
+                        # Check proximity: vertical gap between regions
+                        v_gap = max(0, max(other.y0 - cur.y1, cur.y0 - other.y1))
+                        h_gap = max(0, max(other.x0 - cur.x1, cur.x0 - other.x1))
+                        if v_gap > gap and h_gap > gap:
+                            continue
+                        candidate = cur | other
+                        overlaps_text = any(
+                            candidate.intersects(lt)
+                            and (candidate & lt).get_area() > lt.get_area() * 0.3
+                            for lt in large_text_rects
+                        )
+                        if not overlaps_text:
+                            cur = candidate
+                            skip.add(j)
+                            changed = True
+                    new.append(cur)
+                regions = new
+            return regions
+
+        fig_regions = merge_nearby_figures(fig_regions)
+
+        # --- Filter out tiny or degenerate regions ---
         pw, ph = page.rect.width, page.rect.height
         fig_regions = [
             r
             for r in fig_regions
-            if r.width > pw * 0.08 and r.height > ph * 0.05
+            if r.width > pw * 0.12
+            and r.height > ph * 0.05
+            and r.width / max(r.height, 1) > 0.15  # reject very tall/narrow slivers
         ]
 
         # --- Extract each figure region ---
@@ -229,7 +278,18 @@ def extract(pdf_path: str, img_dir: str) -> None:
 
             clip = crop_region + fitz.Rect(-3, -3, 3, 3)  # small padding
             clip &= page.rect  # clamp to page
+
+            # Guard against degenerate clips (e.g. caption cropping pushed y1 above y0)
+            if clip.is_empty or clip.width < 5 or clip.height < 5:
+                fig_count -= 1
+                continue
+
             pix = page.get_pixmap(dpi=300, clip=clip)
+
+            # PyMuPDF can produce zero-dimension pixmaps for certain clip regions
+            if pix.width < 1 or pix.height < 1:
+                fig_count -= 1
+                continue
 
             fname = f"fig{fig_count}_p{page_idx + 1}.png"
             fpath = os.path.join(img_dir, fname)
