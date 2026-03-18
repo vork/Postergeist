@@ -191,6 +191,177 @@
         }
     }
 
+    // --- Split cell divider resize (absolutely positioned, like column dividers) ---
+    function initSplitResize() {
+        document.querySelectorAll(".split-container").forEach((container) => {
+            const subcells = Array.from(container.querySelectorAll(":scope > .subcell"));
+            if (subcells.length < 2) return;
+
+            container.style.position = "relative";
+
+            for (let i = 0; i < subcells.length - 1; i++) {
+                const divider = document.createElement("div");
+                divider.className = "split-divider";
+                container.appendChild(divider);
+
+                function positionDivider() {
+                    const leftRect = subcells[i].getBoundingClientRect();
+                    const containerRect = container.getBoundingClientRect();
+                    const viewport = document.querySelector(".poster-viewport");
+                    const transform = getComputedStyle(viewport).transform;
+                    let scale = 1;
+                    if (transform && transform !== "none") {
+                        const match = transform.match(/matrix\(([^,]+)/);
+                        if (match) scale = parseFloat(match[1]);
+                    }
+                    divider.style.left = ((leftRect.right - containerRect.left) / scale) + "px";
+                }
+                positionDivider();
+                window.addEventListener("resize", positionDivider);
+                window.addEventListener("cellsscaled", positionDivider);
+
+                const leftSub = subcells[i];
+                const rightSub = subcells[i + 1];
+
+                divider.addEventListener("mousedown", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const startX = e.clientX;
+                    const startLeftWidth = leftSub.offsetWidth;
+                    const totalWidth = startLeftWidth + rightSub.offsetWidth;
+                    const startLeftFlex = parseFloat(leftSub.style.flex) || 1;
+                    const startRightFlex = parseFloat(rightSub.style.flex) || 1;
+                    divider.classList.add("active");
+                    document.body.style.cursor = "col-resize";
+
+                    const viewport = document.querySelector(".poster-viewport");
+                    const transform = getComputedStyle(viewport).transform;
+                    let scale = 1;
+                    if (transform && transform !== "none") {
+                        const match = transform.match(/matrix\(([^,]+)/);
+                        if (match) scale = parseFloat(match[1]);
+                    }
+
+                    const onMove = (ev) => {
+                        const dx = ev.clientX - startX;
+                        const posterDx = dx / scale;
+                        const leftShare = (startLeftWidth + posterDx) / totalWidth;
+                        const rightShare = 1 - leftShare;
+
+                        if (leftShare > 0.1 && rightShare > 0.1) {
+                            const totalFlex = startLeftFlex + startRightFlex;
+                            leftSub.style.flex = (leftShare * totalFlex).toFixed(3);
+                            rightSub.style.flex = (rightShare * totalFlex).toFixed(3);
+                            positionDivider();
+                        }
+                    };
+
+                    const onUp = () => {
+                        document.removeEventListener("mousemove", onMove);
+                        document.removeEventListener("mouseup", onUp);
+                        divider.classList.remove("active");
+                        document.body.style.cursor = "";
+                        if (typeof scaleAllCells === "function") scaleAllCells();
+                    };
+
+                    document.addEventListener("mousemove", onMove);
+                    document.addEventListener("mouseup", onUp);
+                });
+            }
+        });
+    }
+
+    // --- Image grid resize handles (between grid figures) ---
+    function initGridResize() {
+        document.querySelectorAll(".image-grid").forEach((grid) => {
+            const figures = Array.from(grid.querySelectorAll(":scope > figure"));
+            if (figures.length < 2) return;
+
+            grid.style.position = "relative";
+
+            for (let i = 0; i < figures.length - 1; i++) {
+                const divider = document.createElement("div");
+                divider.className = "split-divider";
+                grid.appendChild(divider);
+
+                function positionDivider() {
+                    const leftRect = figures[i].getBoundingClientRect();
+                    const gridRect = grid.getBoundingClientRect();
+                    // Account for both viewport scale and cell-content scale
+                    const viewport = document.querySelector(".poster-viewport");
+                    const vpTransform = getComputedStyle(viewport).transform;
+                    let vpScale = 1;
+                    if (vpTransform && vpTransform !== "none") {
+                        const match = vpTransform.match(/matrix\(([^,]+)/);
+                        if (match) vpScale = parseFloat(match[1]);
+                    }
+                    // Cell content scale (grid is inside a scaled .cell-content)
+                    const cellContent = grid.closest(".cell-content");
+                    let cellScale = 1;
+                    if (cellContent) {
+                        const ct = getComputedStyle(cellContent).transform;
+                        if (ct && ct !== "none") {
+                            const cm = ct.match(/matrix\(([^,]+)/);
+                            if (cm) cellScale = parseFloat(cm[1]);
+                        }
+                    }
+                    const totalScale = vpScale * cellScale;
+                    divider.style.left = ((leftRect.right - gridRect.left) / totalScale) + "px";
+                }
+                positionDivider();
+                window.addEventListener("resize", positionDivider);
+                window.addEventListener("cellsscaled", positionDivider);
+
+                const leftFig = figures[i];
+                const rightFig = figures[i + 1];
+
+                divider.addEventListener("mousedown", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const startX = e.clientX;
+                    const startLeftWidth = leftFig.offsetWidth;
+                    const totalWidth = startLeftWidth + rightFig.offsetWidth;
+                    const startLeftFlex = parseFloat(leftFig.style.flex) || 1;
+                    const startRightFlex = parseFloat(rightFig.style.flex) || 1;
+                    divider.classList.add("active");
+                    document.body.style.cursor = "col-resize";
+
+                    const viewport = document.querySelector(".poster-viewport");
+                    const transform = getComputedStyle(viewport).transform;
+                    let scale = 1;
+                    if (transform && transform !== "none") {
+                        const match = transform.match(/matrix\(([^,]+)/);
+                        if (match) scale = parseFloat(match[1]);
+                    }
+
+                    const onMove = (ev) => {
+                        const dx = ev.clientX - startX;
+                        const posterDx = dx / scale;
+                        const leftShare = (startLeftWidth + posterDx) / totalWidth;
+                        const rightShare = 1 - leftShare;
+
+                        if (leftShare > 0.05 && rightShare > 0.05) {
+                            const totalFlex = startLeftFlex + startRightFlex;
+                            leftFig.style.flex = (leftShare * totalFlex).toFixed(3);
+                            rightFig.style.flex = (rightShare * totalFlex).toFixed(3);
+                            positionDivider();
+                        }
+                    };
+
+                    const onUp = () => {
+                        document.removeEventListener("mousemove", onMove);
+                        document.removeEventListener("mouseup", onUp);
+                        divider.classList.remove("active");
+                        document.body.style.cursor = "";
+                    };
+
+                    document.addEventListener("mousemove", onMove);
+                    document.addEventListener("mouseup", onUp);
+                });
+            }
+        });
+    }
+
     // --- Cell action buttons ---
     function initCellActions() {
         document.querySelectorAll(".cell").forEach((cell) => {
@@ -305,6 +476,8 @@
         initDragDrop();
         initCellResize();
         initColumnResize();
+        initSplitResize();
+        initGridResize();
         initCellActions();
         initToolbar();
         initLiveReload();

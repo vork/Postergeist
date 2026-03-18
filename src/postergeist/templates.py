@@ -19,8 +19,8 @@ TEMPLATES = {
             "table_header_text": "#ffffff",
         },
         "fonts": {
-            "heading": "Roboto Slab",
-            "body": "Open Sans",
+            "heading": "DM Sans",
+            "body": "Source Serif 4",
         },
         "style": {
             "cell_radius": "0px",
@@ -52,8 +52,8 @@ TEMPLATES = {
             "table_header_text": "#0f0f1a",
         },
         "fonts": {
-            "heading": "Space Grotesk",
-            "body": "Inter",
+            "heading": "Oswald",
+            "body": "Montserrat",
         },
         "style": {
             "cell_radius": "4mm",
@@ -65,6 +65,8 @@ TEMPLATES = {
             "poster_margin": "10mm",
             "header_padding": "6mm 10mm",
             "header_layout": "banner",
+            "image_border": "0.3mm solid rgba(255,255,255,0.12)",
+            "image_radius": "2mm",
         },
     },
     "minimal": {
@@ -85,8 +87,8 @@ TEMPLATES = {
             "table_header_text": "#ffffff",
         },
         "fonts": {
-            "heading": "Playfair Display",
-            "body": "Source Sans 3",
+            "heading": "Averia Serif Libre",
+            "body": "Geist",
         },
         "style": {
             "cell_radius": "1mm",
@@ -119,13 +121,46 @@ TEMPLATES = {
         },
         "fonts": {
             "heading": "Poppins",
-            "body": "Nunito",
+            "body": "Lora",
         },
         "style": {
             "cell_radius": "4mm",
             "cell_shadow": "0 1mm 5mm rgba(0,0,0,0.08)",
             "cell_border_width": "0px",
             "cell_padding": "6mm",
+            "cell_gap": "4mm",
+            "column_gap": "5mm",
+            "poster_margin": "10mm",
+            "header_padding": "6mm 10mm",
+            "header_layout": "banner",
+        },
+    },
+    "modern-light": {
+        "name": "Modern Light",
+        "description": "Light counterpart to Modern Dark with the same fonts and layout",
+        "colors": {
+            "primary": "#00a8cc",
+            "secondary": "#00d4ff",
+            "accent": "#ff6b9d",
+            "background": "#f0f2f5",
+            "surface": "#ffffff",
+            "text": "#1a1a2e",
+            "text_light": "#ffffff",
+            "header_bg": "#1a1a2e",
+            "cell_border": "rgba(0,168,204,0.15)",
+            "poster_bg": "#e8eaed",
+            "table_header_bg": "#00d4ff",
+            "table_header_text": "#0f0f1a",
+        },
+        "fonts": {
+            "heading": "Oswald",
+            "body": "Montserrat",
+        },
+        "style": {
+            "cell_radius": "4mm",
+            "cell_shadow": "0 2mm 8mm rgba(0,0,0,0.08)",
+            "cell_border_width": "0.3mm",
+            "cell_padding": "5mm",
             "cell_gap": "4mm",
             "column_gap": "5mm",
             "poster_margin": "10mm",

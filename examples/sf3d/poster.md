@@ -27,19 +27,19 @@ poster:
   qr_label: Project Page with Code and Video
   logos:
   - images/Logo.png
-  colors:
-    primary: '#2d1b69'
-    secondary: '#A382FF'
-  fonts:
-    heading: Karla
-    body: Inconsolata
-  font_scale: 1.5
-  style:
-    column_gap: 8mm
-    cell_gap: 6mm
-    cell_padding: 6mm
-    poster_margin: 12mm
-    header_padding: 8mm 12mm
+  # colors:
+  #   primary: '#2d1b69'
+  #   secondary: '#A382FF'
+  # fonts:
+  #   heading: Karla
+  #   body: Inconsolata
+  # font_scale: 1.5
+  # style:
+  #   column_gap: 8mm
+  #   cell_gap: 6mm
+  #   cell_padding: 6mm
+  #   poster_margin: 12mm
+  #   header_padding: 8mm 12mm
 ---
 
 ## SF3D Improvements
@@ -75,7 +75,7 @@ Key findings:
 
 ## Topology
 
-<!-- col: 0, h: 0.79, split: true -->
+<!-- col: 0, h: 0.84, split: true -->
 
 ### Topology
 
@@ -88,7 +88,7 @@ Key findings:
 
 ### Aliasing Issues
 
-![GT](images/Aliasing.png)
+![**Aliasing:** Higher resolutions reduce aliasing](images/Aliasing.png)
 
 - Higher resolution grids lead to less aliasing artifacts
 

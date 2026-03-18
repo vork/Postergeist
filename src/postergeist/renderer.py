@@ -56,27 +56,42 @@ def _render_markdown(text: str) -> str:
     # Protect inline math ($...$) - but not in code
     text = re.sub(r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)", protect_inline_math, text)
 
-    # Protect grid image captions from markdown stripping formatting in alt text
+    # Protect ALL image captions from markdown stripping formatting in alt text
     # Store the raw alt text (with markdown) before mistune processes it
-    grid_images = {}
+    all_images = {}
+    grid_images = {}  # Subset: images inside grid blocks
 
-    def protect_grid_image(m):
-        key = f"GRID_IMG_{counter[0]}"
+    def protect_any_image(m):
         alt = m.group(1)
+        # Skip images already protected by grid block protection
+        if re.match(r'^IMG_\d+$', alt):
+            return m.group(0)
+        key = f"IMG_{counter[0]}"
         src = m.group(2)
-        grid_images[key] = (alt, src)
+        all_images[key] = (alt, src)
         counter[0] += 1
-        return key
+        return f"![{key}]({src})"
 
-    # Only protect images that appear after a {grid:...} marker
+    # Track which images are inside grid blocks
     def protect_grid_block(m):
         prefix = m.group(1)  # The {grid:...} line
         rest = m.group(2)
         # Replace image syntax in the rest with placeholders
+        def protect_grid_image(im):
+            key = f"IMG_{counter[0]}"
+            alt = im.group(1)
+            src = im.group(2)
+            all_images[key] = (alt, src)
+            grid_images[key] = (alt, src)
+            counter[0] += 1
+            return f"![{key}]({src})"
         protected = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', protect_grid_image, rest)
         return prefix + protected
 
+    # First protect grid images (so we can tag them)
     text = re.sub(r'(\{grid:\d+(?::\w+)?\}[ \t]*\n)(.*?)(?=\n##|\n\{grid:|\Z)', protect_grid_block, text, flags=re.DOTALL)
+    # Then protect all remaining images
+    text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', protect_any_image, text)
 
     md = mistune.create_markdown(
         plugins=["table", "strikethrough", "footnotes", "task_lists"],
@@ -112,67 +127,75 @@ def _render_markdown(text: str) -> str:
         rendered = re.sub(r'`(.+?)`', r'<code>\1</code>', rendered)
         return rendered
 
+    def _build_figure(alt, src, is_grid=True):
+        """Build a figure element from alt text and src, with optional weight."""
+        weight = 1
+        alt_clean = alt
+        weight_match = re.match(r'\{w:(\d+(?:\.\d+)?)\}\s*', alt)
+        if weight_match:
+            weight = float(weight_match.group(1))
+            alt_clean = alt[weight_match.end():]
+        caption_rendered = _render_caption(alt_clean)
+        caption_html = f'<figcaption>{caption_rendered}</figcaption>' if alt_clean else ''
+        if is_grid:
+            flex_style = f' style="flex: {weight};"' if weight != 1 else ''
+            return f'<figure{flex_style}><div class="grid-img-wrap"><img src="{src}" alt="{alt_clean}"></div>{caption_html}</figure>'
+        else:
+            return f'<figure class="img-figure"><img src="{src}" alt="{alt_clean}">{caption_html}</figure>'
+
     def convert_grid(m):
         cols = int(m.group(1))
         align = m.group(2) or "bottom"
         rest = m.group(3)
-        # Find grid image placeholders (GRID_IMG_N) or regular <img> tags
-        placeholder_pattern = r'GRID_IMG_(\d+)'
+        # Find image placeholders (IMG_N) in alt text
+        placeholder_pattern = r'<img\s+src="([^"]+)"\s+alt="(IMG_\d+)"[^>]*/?\s*>'
         placeholders = list(re.finditer(placeholder_pattern, rest))[:cols]
         if not placeholders:
-            # Fallback: look for regular <img> tags (images not in grid blocks)
-            img_pattern = r'<img\s+src="([^"]+)"\s+alt="([^"]*)"[^>]*/?>|<img\s+src="([^"]+)"\s+alt="([^"]*)"[^>]*>'
-            images = list(re.finditer(img_pattern, rest))[:cols]
-            if not images:
-                return m.group(0)
-            figures = []
-            for img in images:
-                src = img.group(1) or img.group(3)
-                alt = img.group(2) or img.group(4)
-                weight = 1
-                alt_clean = alt
-                weight_match = re.match(r'\{w:(\d+(?:\.\d+)?)\}\s*', alt)
-                if weight_match:
-                    weight = float(weight_match.group(1))
-                    alt_clean = alt[weight_match.end():]
-                caption_rendered = _render_caption(alt_clean)
-                caption_html = f'<figcaption>{caption_rendered}</figcaption>' if alt_clean else ''
-                flex_style = f' style="flex: {weight};"' if weight != 1 else ''
-                figures.append(f'<figure{flex_style}><div class="grid-img-wrap"><img src="{src}" alt="{alt_clean}"></div>{caption_html}</figure>')
-            consumed_end = images[-1].end()
-            remaining = rest[consumed_end:]
-        else:
-            figures = []
-            for ph in placeholders:
-                key = f"GRID_IMG_{ph.group(1)}"
-                if key in grid_images:
-                    alt, src = grid_images[key]
-                else:
-                    continue
-                weight = 1
-                alt_clean = alt
-                weight_match = re.match(r'\{w:(\d+(?:\.\d+)?)\}\s*', alt)
-                if weight_match:
-                    weight = float(weight_match.group(1))
-                    alt_clean = alt[weight_match.end():]
-                caption_rendered = _render_caption(alt_clean)
-                caption_html = f'<figcaption>{caption_rendered}</figcaption>' if alt_clean else ''
-                flex_style = f' style="flex: {weight};"' if weight != 1 else ''
-                figures.append(f'<figure{flex_style}><div class="grid-img-wrap"><img src="{src}" alt="{alt_clean}"></div>{caption_html}</figure>')
-            consumed_end = placeholders[-1].end()
-            remaining = rest[consumed_end:]
+            return m.group(0)
+        figures = []
+        for ph in placeholders:
+            key = ph.group(2)
+            src = ph.group(1)
+            if key in grid_images:
+                alt, _ = grid_images[key]
+            else:
+                alt = ""
+            figures.append(_build_figure(alt, src, is_grid=True))
+        consumed_end = placeholders[-1].end()
+        remaining = rest[consumed_end:]
         align_class = f' align-{align}' if align != "bottom" else ''
         grid_html = f'<div class="image-grid{align_class}">{"".join(figures)}</div>'
         return grid_html + remaining
 
     # Syntax: {grid:N} or {grid:N:align} where align is top/center/bottom
+    # Match both: <p>{grid:N}</p> followed by images, AND <p>{grid:N}\n<img...></p> (same paragraph)
+    html = re.sub(r'<p>\{grid:(\d+)(?::(\w+))?\}\s*\n(.*?)</p>', convert_grid, html, flags=re.DOTALL)
     html = re.sub(r'<p>\{grid:(\d+)(?::(\w+))?\}</p>(.*?)(?=<h[234]|<div class="image-grid"|$)', convert_grid, html, flags=re.DOTALL)
 
-    # Clean up any remaining grid image placeholders that weren't consumed
-    for key in grid_images:
-        alt, src = grid_images[key]
-        html = html.replace(key, f'<img src="{src}" alt="{alt}">')
-        html = html.replace(f'<p>{key}</p>', f'<p><img src="{src}" alt="{alt}"></p>')
+    # Convert remaining standalone images (non-grid) with protected alt text into figures
+    def _restore_img(m):
+        src = m.group(1)
+        key = m.group(2)
+        if key in all_images and key not in grid_images:
+            alt, _ = all_images[key]
+            if alt and alt.strip():
+                return _build_figure(alt, src, is_grid=False)
+        # No caption or grid image leftover — return plain img
+        return f'<img src="{src}" alt="">'
+
+    # Match images with IMG_N placeholder as alt text
+    html = re.sub(
+        r'<img\s+src="([^"]+)"\s+alt="(IMG_\d+)"[^>]*/?\s*>',
+        _restore_img,
+        html,
+    )
+    # Also handle wrapped in <p> tags
+    html = re.sub(
+        r'<p>(<figure class="img-figure">.*?</figure>)</p>',
+        r'\1',
+        html,
+        flags=re.DOTALL,
+    )
 
     return html
 
@@ -418,6 +441,8 @@ def render_poster(poster: Poster, edit_mode: bool = False, base_url: str = "") -
     --poster-margin: {poster_margin};
     --header-padding: {header_padding};
     --body-bg: {body_bg};
+    --img-border: {style.get('image_border', 'none')};
+    --img-radius: {style.get('image_radius', '1mm')};
     --font-heading: '{fonts['heading']}', serif;
     --font-body: '{fonts['body']}', sans-serif;
     --font-scale: {font_scale};
@@ -608,15 +633,17 @@ body {{
     height: auto;
     display: block;
     margin: 3mm auto;
-    border-radius: 1mm;
+    border-radius: var(--img-radius);
+    border: var(--img-border);
 }}
 
 /* Image grid - side by side images with captions below */
 .image-grid {{
     display: flex;
-    gap: 3mm;
-    margin: 3mm 0;
+    gap: 2mm;
+    margin: 1.5mm 0;
     align-items: stretch;
+    position: relative;
 }}
 .image-grid figure {{
     flex: 1;
@@ -638,16 +665,42 @@ body {{
     height: auto;
     margin: 0;
     display: block;
+    border-radius: var(--img-radius);
+    border: var(--img-border);
 }}
 .image-grid figure figcaption {{
-    font-size: calc(4.5mm * var(--font-scale));
+    font-size: calc(4mm * var(--font-scale));
     color: var(--text);
-    padding-top: 1.5mm;
+    padding-top: 1mm;
     font-weight: 600;
     text-align: center;
     flex-shrink: 0;
 }}
 .image-grid figure figcaption strong {{
+    color: var(--primary);
+}}
+
+/* Standalone image with caption */
+.img-figure {{
+    text-align: center;
+    margin: 3mm 0;
+}}
+.img-figure img {{
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    border-radius: var(--img-radius);
+    border: var(--img-border);
+}}
+.img-figure figcaption {{
+    font-size: calc(4.5mm * var(--font-scale));
+    color: var(--text);
+    padding-top: 1.5mm;
+    font-weight: 600;
+    text-align: center;
+}}
+.img-figure figcaption strong {{
     color: var(--primary);
 }}
 
@@ -729,6 +782,42 @@ body {{
     font-size: calc(6mm * var(--font-scale));
     font-weight: var(--cell-heading-weight);
     padding: 2mm var(--cell-padding) 1mm;
+}}
+
+/* Split cell divider drag handle — absolutely positioned overlay to avoid layout shift */
+.split-container {{
+    position: relative;
+}}
+.split-divider {{
+    display: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 10mm;
+    margin-left: -5mm;
+    cursor: col-resize;
+    z-index: 60;
+}}
+.edit-mode .split-divider {{
+    display: block;
+}}
+.split-divider::after {{
+    content: '';
+    position: absolute;
+    top: 5%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1.5mm;
+    height: 90%;
+    background: var(--secondary);
+    border-radius: 1mm;
+    opacity: 0.3;
+    transition: opacity 0.2s, width 0.2s;
+}}
+.split-divider:hover::after,
+.split-divider.active::after {{
+    opacity: 0.9;
+    width: 3mm;
 }}
 
 /* Mermaid */
@@ -966,7 +1055,7 @@ document.addEventListener('DOMContentLoaded', () => {{
     }});
 }});
 
-// Scale content to fit cells — ignores tables so wide tables don't shrink text
+// Compute the scale needed for a single cell's content to fit its wrapper
 function computeCellScale(wrapper) {{
     const content = wrapper.querySelector('.cell-content');
     if (!content) return null;
@@ -979,21 +1068,12 @@ function computeCellScale(wrapper) {{
     const availH = wrapper.clientHeight;
     if (availW <= 0 || availH <= 0) return null;
 
-    // Temporarily hide tables and images so they don't drive the scale computation
-    const heavy = content.querySelectorAll('.table-wrapper, table, img');
-    heavy.forEach(t => {{ t.dataset.origDisplay = t.style.display; t.style.display = 'none'; }});
-
-    let scale = 1.0;
+    // Measure full content height
     const contentH = content.scrollHeight;
+    let scale = 1.0;
     if (contentH > 0) {{
         scale = availH / contentH;
     }}
-
-    // Restore hidden elements
-    heavy.forEach(t => {{ t.style.display = t.dataset.origDisplay || ''; delete t.dataset.origDisplay; }});
-
-    // Clamp: never shrink below 0.75 or grow above 1.15
-    scale = Math.max(0.75, Math.min(scale, 1.15));
 
     return {{ wrapper, content, scale, availW }};
 }}
@@ -1013,6 +1093,19 @@ function scaleAllCells() {{
         allInfos.push(computeCellScale(w));
     }});
 
+    // Collect all scales that need to shrink (< 1.0) to find the tightest cell
+    const shrinkScales = allInfos.filter(i => i && i.scale < 1.0).map(i => i.scale);
+    // The global floor: no cell shrinks more than 0.5
+    const globalFloor = 0.5;
+    // The cap for scaling up: don't let fonts get more than 1.3x
+    const maxScale = 1.3;
+
+    allInfos.forEach(info => {{
+        if (info) {{
+            info.scale = Math.max(globalFloor, Math.min(info.scale, maxScale));
+        }}
+    }});
+
     // For split cells, enforce uniform scale across subcells
     document.querySelectorAll('.split-cell').forEach(splitCell => {{
         const wrappers = splitCell.querySelectorAll('.subcell .cell-content-wrapper');
@@ -1025,12 +1118,13 @@ function scaleAllCells() {{
                 if (info.scale < minScale) minScale = info.scale;
             }}
         }});
-        // Set all subcells to the same (minimum) scale
         subcellInfos.forEach(info => {{ info.scale = minScale; }});
     }});
 
     // Apply all scales
     allInfos.forEach(applyCellScale);
+    // Notify divider handles to reposition after scale change
+    window.dispatchEvent(new Event('cellsscaled'));
 }}
 
 // Auto-scale poster to viewport
