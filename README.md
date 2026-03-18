@@ -2,6 +2,19 @@
 
 Academic poster generator that converts Markdown files to beautiful HTML posters with live preview, drag-and-drop editing, and PDF export.
 
+![Postergeist Poster](examples/postergeist.jpg)
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Frontmatter](#frontmatter)
+- [Features](#content-features)
+- [Templates](#templates)
+- [CLI](#cli-reference)
+- [PDF-To-Poster Claude Skill](#paper-to-poster-skill-claude-code)
+
+
 ## Installation
 
 ```bash
