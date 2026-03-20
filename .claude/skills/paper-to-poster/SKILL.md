@@ -31,7 +31,7 @@ Determine the output directory. If the input was a URL, create a new directory b
 Ensure the environment is installed:
 
 ```bash
-uv sync
+uv sync --extra nougat
 ```
 
 ## Step 1: Extract Paper Content
@@ -40,6 +40,11 @@ Run the built-in extraction module to extract text and figures from the PDF:
 
 ```bash
 uv run python -m postergeist.extract "<pdf_path>" "<output_dir>/images"
+```
+
+To skip Nougat (faster, but no equation support):
+```bash
+uv run python -m postergeist.extract "<pdf_path>"  "<output_dir>/images" --no-nougat
 ```
 
 This produces:

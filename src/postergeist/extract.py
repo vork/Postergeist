@@ -16,6 +16,60 @@ import json
 import fitz  # PyMuPDF
 
 
+def _extract_text_nougat(pdf_path: str) -> list[str] | None:
+    """Extract text per page using the Nougat model (HuggingFace transformers).
+
+    Returns a list of markdown strings (one per page) with LaTeX equations,
+    or None if the required dependencies are not installed.
+    Model weights (~1.3 GB) are downloaded on first use.
+    """
+    try:
+        import torch
+        from transformers import NougatProcessor, VisionEncoderDecoderModel
+        from PIL import Image
+    except ImportError:
+        return None
+
+    print("Loading Nougat model (first run downloads ~1.3 GB)...")
+    processor = NougatProcessor.from_pretrained("facebook/nougat-small")
+    model = VisionEncoderDecoderModel.from_pretrained("facebook/nougat-small")
+
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+
+    model = model.to(device)
+    model.eval()
+
+    doc = fitz.open(pdf_path)
+    page_texts: list[str] = []
+
+    for page_idx, page in enumerate(doc):
+        print(f"  Nougat: page {page_idx + 1}/{len(doc)}...")
+        pix = page.get_pixmap(dpi=200)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+        pixel_values = processor(img, return_tensors="pt").pixel_values.to(device)
+
+        with torch.no_grad():
+            outputs = model.generate(
+                pixel_values,
+                min_length=1,
+                max_new_tokens=4096,
+                bad_words_ids=[[processor.tokenizer.unk_token_id]],
+            )
+
+        text = processor.batch_decode(outputs, skip_special_tokens=True)[0]
+        text = processor.post_process_generation(text, fix_markdown=True)
+        page_texts.append(text)
+
+    doc.close()
+    return page_texts
+
+
 def _autocrop_save(pix: "fitz.Pixmap", fpath: str, margin: int = 6, threshold: int = 250) -> tuple[int, int]:
     """Save pixmap to file, trimming near-white borders. Returns (width, height)."""
     from PIL import Image
@@ -70,8 +124,16 @@ def _autocrop_save(pix: "fitz.Pixmap", fpath: str, margin: int = 6, threshold: i
     return img.size
 
 
-def extract(pdf_path: str, img_dir: str) -> None:
+def extract(pdf_path: str, img_dir: str, use_nougat: bool = True) -> None:
     os.makedirs(img_dir, exist_ok=True)
+
+    nougat_pages: list[str] | None = None
+    if use_nougat:
+        nougat_pages = _extract_text_nougat(pdf_path)
+        if nougat_pages:
+            print(f"Nougat: extracted text with LaTeX from {len(nougat_pages)} pages")
+        else:
+            print("Nougat unavailable, falling back to PyMuPDF text extraction")
 
     doc = fitz.open(pdf_path)
     full_text: list[str] = []
@@ -82,9 +144,13 @@ def extract(pdf_path: str, img_dir: str) -> None:
         # --- Extract text ---
         full_text.append(f"\n--- Page {page_idx + 1} ---\n")
         text_blocks = page.get_text("blocks")  # (x0, y0, x1, y1, text, block_no, type)
-        for b in text_blocks:
-            if b[6] == 0:  # text block
-                full_text.append(b[4])
+        nougat_page = nougat_pages[page_idx] if nougat_pages and page_idx < len(nougat_pages) else None
+        if nougat_page:
+            full_text.append(nougat_page)
+        else:
+            for b in text_blocks:
+                if b[6] == 0:
+                    full_text.append(b[4])
 
         # --- Identify large vs small text blocks ---
         large_text_rects: list[fitz.Rect] = []
@@ -330,7 +396,9 @@ def extract(pdf_path: str, img_dir: str) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print(f"Usage: python -m postergeist.extract <pdf_path> <images_dir>")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    flags = {a for a in sys.argv[1:] if a.startswith("--")}
+    if len(args) < 2:
+        print("Usage: python extract.py <pdf_path> <images_dir> [--no-nougat]")
         sys.exit(1)
-    extract(sys.argv[1], sys.argv[2])
+    extract(args[0], args[1], use_nougat="--no-nougat" not in flags)
