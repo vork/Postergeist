@@ -13,6 +13,7 @@ class Cell:
     content: str  # raw markdown content
     column: int = -1  # -1 = auto-assign
     height: float = 1.0  # relative height within column (flex value)
+    width: float = 1.0  # relative width among sibling subcells (flex value)
     split: bool = False
     subcells: list["Cell"] = field(default_factory=list)
 
@@ -185,10 +186,12 @@ def parse_markdown(text: str) -> Poster:
                     else:
                         sub_title = ""
                         sub_content = sub_part
+                    sub_meta, sub_content = parse_cell_meta(sub_content)
                     subcells.append(Cell(
                         id=f"cell-{cell_id}-sub-{si}",
                         title=sub_title,
                         content=sub_content,
+                        width=sub_meta.get("w", 1.0),
                     ))
 
             cell = Cell(
@@ -249,6 +252,8 @@ def serialize_poster(poster: Poster) -> str:
                     parts.append("\n|||\n")
                 if sub.title:
                     parts.append(f"### {sub.title}\n")
+                if sub.width != 1.0:
+                    parts.append(f"<!-- w: {sub.width} -->\n")
                 parts.append(sub.content + "\n")
         else:
             parts.append(cell.content + "\n")

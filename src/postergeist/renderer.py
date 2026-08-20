@@ -211,7 +211,7 @@ def _render_cell_html(cell: Cell, template: dict) -> str:
             sub_title_html = f'<div class="cell-header subcell-header">{sub.title}</div>' if sub.title else ""
             sub_content = _render_markdown(sub.content)
             subcell_html += f'''
-            <div class="subcell" data-id="{sub.id}">
+            <div class="subcell" data-id="{sub.id}" data-width="{sub.width}" style="flex: {sub.width};">
                 {sub_title_html}
                 <div class="cell-content-wrapper">
                     <div class="cell-content">{sub_content}</div>
@@ -365,8 +365,12 @@ def render_poster(poster: Poster, edit_mode: bool = False, base_url: str = "") -
     table_hdr_text = colors.get("table_header_text", colors.get("text_light", "#fff"))
     if table_hdr_bg.startswith("linear-gradient") or table_hdr_bg.startswith("radial-gradient"):
         table_hdr_bg_css = f"background: {table_hdr_bg};"
+        # a gradient has to span the whole row, so the cells stay transparent
+        table_hdr_th_bg_css = "background: transparent;"
     else:
         table_hdr_bg_css = f"background-color: {table_hdr_bg};"
+        # also paint the cells: Chromium drops <tr> backgrounds when printing to PDF
+        table_hdr_th_bg_css = f"background-color: {table_hdr_bg};"
 
     # Body background (area between cells/columns, defaults to background color)
     body_bg = colors.get("body_bg", colors["background"])
@@ -721,7 +725,7 @@ body {{
     {table_hdr_bg_css}
 }}
 .cell-content th {{
-    background: transparent;
+    {table_hdr_th_bg_css}
     color: {table_hdr_text};
     padding: 2mm 2mm;
     text-align: left;

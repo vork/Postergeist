@@ -188,6 +188,14 @@ def create_app(poster_path: str, edit_mode: bool = True) -> Flask:
             if cell:
                 cell.height = round(height, 2)
 
+        elif action == "split_widths":
+            # Update relative widths of the subcells inside a split cell
+            cell = find_cell(data.get("cell_id"))
+            widths = data.get("widths", [])
+            if cell and cell.split:
+                for sub, w in zip(cell.subcells, widths):
+                    sub.width = round(float(w), 2)
+
         elif action == "split":
             # Split a cell into two subcells
             cell_id = data.get("cell_id")

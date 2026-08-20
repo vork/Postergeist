@@ -261,7 +261,18 @@
                         document.removeEventListener("mouseup", onUp);
                         divider.classList.remove("active");
                         document.body.style.cursor = "";
-                        if (typeof scaleAllCells === "function") scaleAllCells();
+
+                        const cell = container.closest(".cell");
+                        const widths = subcells.map(
+                            (s) => parseFloat(parseFloat(s.style.flex).toFixed(2)) || 1
+                        );
+                        apiSave({
+                            action: "split_widths",
+                            cell_id: cell ? cell.dataset.id : null,
+                            widths: widths,
+                        }).then(() => {
+                            if (typeof scaleAllCells === "function") scaleAllCells();
+                        });
                     };
 
                     document.addEventListener("mousemove", onMove);
